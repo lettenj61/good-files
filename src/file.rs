@@ -16,7 +16,7 @@ pub trait Open {
 pub enum CreateMode {
     CreateNew,
     IfNotExists,
-    Never
+    Never,
 }
 
 /// `WriteOption` represents how an input would be handled
@@ -24,67 +24,50 @@ pub enum CreateMode {
 pub enum WriteOption {
     Append,
     Overwrite,
-    Truncate
+    Truncate,
 }
 
-/// `FileOpener` indicates how an `Open` trait handle
-/// file when it is called to open a file.
+/// `FileOpener` is typical implementation of `Open` trait, handles that
+/// how a file must be created, or what operations will be allowed on open file.
 pub struct FileOpener(CreateMode, bool, Option<WriteOption>);
 
 /// The `File` object wraps `PathBuf` and provides convenient functions
 /// to perform I/O operation.
+///
+/// Not like its name, `File` is closer to `Path` struct than `std::fs::File`,
+/// as it implements `Deref<Target=Path>`.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct File {
-    pub path: PathBuf
+    path: PathBuf,
 }
 
 impl FileOpener {
     /// Open file for appending, fails if file does not exist.
     pub fn appending() -> Self {
-        FileOpener(
-            CreateMode::Never,
-            false,
-            Some(WriteOption::Append)
-        )
+        FileOpener(CreateMode::Never, false, Some(WriteOption::Append))
     }
 
     /// Open file for writing, create new file if the file does not exist.
     /// The content of file will be truncated.
     pub fn truncate() -> Self {
-        FileOpener(
-            CreateMode::IfNotExists,
-            false,
-            Some(WriteOption::Truncate)
-        )
+        FileOpener(CreateMode::IfNotExists, false, Some(WriteOption::Truncate))
     }
 
     /// Open file for writing, create new file if the file does not exist.
     /// The content of the file will be overwritten.
     pub fn overwrite() -> Self {
-        FileOpener(
-            CreateMode::IfNotExists,
-            false,
-            Some(WriteOption::Overwrite)
-        )
+        FileOpener(CreateMode::IfNotExists, false, Some(WriteOption::Overwrite))
     }
 
     /// Open file for appending, create new file if the file does not exist.
     /// The content of the file will be preserved.
     pub fn append_or_create() -> Self {
-        FileOpener(
-            CreateMode::IfNotExists,
-            false,
-            Some(WriteOption::Append)
-        )
+        FileOpener(CreateMode::IfNotExists, false, Some(WriteOption::Append))
     }
 
     /// Open file for reading, fails if the file does not exist.
     pub fn readonly() -> Self {
-        FileOpener(
-            CreateMode::Never,
-            true,
-            None
-        )
+        FileOpener(CreateMode::Never, true, None)
     }
 
     /// Construct owned `OpenOptions` from this opener.
@@ -92,22 +75,31 @@ impl FileOpener {
         let mut opts = OpenOptions::new();
         // set creation mode
         match self.0 {
-            CreateMode::CreateNew   => { opts.create_new(true); },
-            CreateMode::IfNotExists => { opts.create(true); },
-            _                       => { }
+            CreateMode::CreateNew => {
+                opts.create_new(true);
+            }
+            CreateMode::IfNotExists => {
+                opts.create(true);
+            }
+            _ => {}
         }
         // set read option
         opts.read(self.1);
         // set write option
         match self.2 {
-            Some(WriteOption::Append)       => { opts.append(true); },
-            Some(WriteOption::Overwrite)    => { opts.write(true); },
-            Some(WriteOption::Truncate)     => { opts.truncate(true); },
-            None                            => { }
+            Some(WriteOption::Append) => {
+                opts.append(true);
+            }
+            Some(WriteOption::Overwrite) => {
+                opts.write(true);
+            }
+            Some(WriteOption::Truncate) => {
+                opts.truncate(true);
+            }
+            None => {}
         }
         opts
     }
-
 }
 
 impl Open for FileOpener {
@@ -117,7 +109,6 @@ impl Open for FileOpener {
 }
 
 impl File {
-
     /// Create a new owned `File` with given path.
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         File { path: path.as_ref().to_path_buf() }
