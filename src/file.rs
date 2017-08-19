@@ -37,9 +37,7 @@ pub struct FileOpener(CreateMode, bool, Option<WriteOption>);
 /// Not like its name, `File` is closer to `Path` struct than `std::fs::File`,
 /// as it implements `Deref<Target=Path>`.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct File {
-    path: PathBuf,
-}
+pub struct File(PathBuf);
 
 impl FileOpener {
     /// Open file for appending, fails if file does not exist.
@@ -111,12 +109,12 @@ impl Open for FileOpener {
 impl File {
     /// Create a new owned `File` with given path.
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        File { path: path.as_ref().to_path_buf() }
+        File(path.as_ref().to_path_buf())
     }
 
     /// Open file with owned `Path` with given open options
     pub fn open_with<O: Open>(&self, opt: O) -> io::Result<fs::File> {
-        opt.open(&self.path)
+        opt.open(&self.0)
     }
 
     pub fn create_if_absent(&self) -> io::Result<fs::File> {
@@ -124,12 +122,12 @@ impl File {
     }
 
     pub fn buf_reader(&self) -> io::Result<BufReader<fs::File>> {
-        let f = FileOpener::readonly().open(&self.path)?;
+        let f = FileOpener::readonly().open(&self.0)?;
         Ok(BufReader::new(f))
     }
 
     pub fn buf_writer<O: Open>(&self, opt: O) -> io::Result<BufWriter<fs::File>> {
-        let f = opt.open(&self.path)?;
+        let f = opt.open(&self.0)?;
         Ok(BufWriter::new(f))
     }
 
@@ -167,9 +165,15 @@ impl File {
     }
 }
 
+impl AsRef<Path> for File {
+    fn as_ref(&self) -> &Path {
+        self.0.as_ref()
+    }
+}
+
 impl Default for File {
     fn default() -> Self {
-        File { path: PathBuf::new() }
+        File(PathBuf::new())
     }
 }
 
@@ -177,13 +181,13 @@ impl ops::Deref for File {
     type Target = Path;
 
     fn deref(&self) -> &Path {
-        self.path.as_ref()
+        self.0.as_ref()
     }
 }
 
 impl From<PathBuf> for File {
     fn from(path: PathBuf) -> File {
-        File { path: path }
+        File(path)
     }
 }
 
@@ -205,7 +209,7 @@ mod tests {
     #[test]
     fn file_object() {
         let f = File::new("/path/to/some/file");
-        assert_eq!(Path::new("/path/to/some/file"), &f.path);
+        assert_eq!(Path::new("/path/to/some/file"), f.as_ref());
     }
 
     #[test]
