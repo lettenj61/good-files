@@ -112,13 +112,15 @@ impl File {
         File(path.as_ref().to_path_buf())
     }
 
-    /// Open file with owned `Path` with given open options
-    pub fn open_with<O: Open>(&self, opt: O) -> io::Result<fs::File> {
-        opt.open(&self.0)
-    }
-
-    pub fn create_if_absent(&self) -> io::Result<fs::File> {
-        self.open_with(FileOpener::append_or_create())
+    /// Attempt to create new file at given path if there is none.
+    pub fn create_if_absent(&mut self) -> io::Result<&mut Self> {
+        if self.is_file() {
+            Ok(self)
+        } else {
+            let f = fs::File::create(&self.0)?;
+            f.sync_all()?;
+            Ok(self)
+        }
     }
 
     pub fn buf_reader(&self) -> io::Result<BufReader<fs::File>> {
@@ -145,23 +147,23 @@ impl File {
         Ok(s)
     }
 
-    pub fn append(&self, buf: &[u8]) -> io::Result<()> {
+    pub fn append(&mut self, buf: &[u8]) -> io::Result<&mut Self> {
         self.write_all_with(buf, FileOpener::appending())
     }
 
-    pub fn overwrite(&self, buf: &[u8]) -> io::Result<()> {
+    pub fn overwrite(&mut self, buf: &[u8]) -> io::Result<&mut Self> {
         self.write_all_with(buf, FileOpener::overwrite())
     }
 
-    pub fn truncate(&self, buf: &[u8]) -> io::Result<()> {
+    pub fn truncate(&mut self, buf: &[u8]) -> io::Result<&mut Self> {
         self.write_all_with(buf, FileOpener::truncate())
     }
 
-    pub fn write_all_with<O: Open>(&self, buf: &[u8], opt: O) -> io::Result<()> {
+    pub fn write_all_with<O: Open>(&mut self, buf: &[u8], opt: O) -> io::Result<&mut Self> {
         let mut w = self.buf_writer(opt)?;
         w.write_all(buf)?;
         w.get_ref().sync_all()?;
-        Ok(())
+        Ok(self)
     }
 }
 
@@ -206,6 +208,18 @@ mod tests {
         Ok(dir)
     }
 
+    fn run_fluent_ops(input: &str) -> io::Result<String> {
+        let tmp_dir = test_dir()?;
+        let path = tmp_dir.path().join("fluent.txt");
+        let mut f = File::new(&path);
+
+        let content = f.create_if_absent()?
+            .overwrite(input.as_bytes())?
+            .read_string()?;
+
+        Ok(content)
+    }
+
     #[test]
     fn file_object() {
         let f = File::new("/path/to/some/file");
@@ -224,11 +238,35 @@ mod tests {
     }
 
     #[test]
+    fn touch() {
+        let tmp_dir = test_dir().unwrap();
+        let path = tmp_dir.path().join("test.txt");
+        let mut f = File::new(&path);
+        f.create_if_absent().unwrap();
+        assert!(f.exists());
+    }
+
+    #[test]
+    fn touch_fails_on_dir() {
+        let tmp_dir = test_dir().unwrap();
+        let path = tmp_dir.path();
+        let mut f: File = File::new(path);
+        let ret = f.create_if_absent();
+        assert!(ret.is_err());
+    }
+
+    #[test]
+    fn fluent_ops() {
+        let input = "Hello, is there anybody\nI miss you";
+        let s = run_fluent_ops(&input).unwrap();
+        assert_eq!(input, &s);
+    }
+
+    #[test]
     fn read_write_ops() {
-        // TODO: revisit when good-files' utilities are ready
         let tmp_dir = test_dir().unwrap();
         let path = tmp_dir.path().join("foo.txt");
-        let f = File::new(&path);
+        let mut f = File::new(&path);
 
         // writing
         f.overwrite(b"some text\n2nd line").unwrap();
